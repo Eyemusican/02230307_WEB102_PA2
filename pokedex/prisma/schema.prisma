@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model users {
+  id          Int       @id
+  f_name      String?   @db.VarChar(255)
+  m_name      String?   @db.VarChar(255)
+  l_name      String?   @db.VarChar(255)
+  dob         DateTime? @db.Date
+  gender      String?   @db.VarChar(50)
+  email       String    @unique @db.VarChar(255)
+  password    String    @db.VarChar(255)
+  phonenumber String    @db.VarChar(255)
+  createdat   DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model mycollection {
+  id        Int     @id @default(autoincrement())
+  pokeimg   String  @db.VarChar(255)
+  pokeid    Int
+  pokename  String  @db.VarChar(255)
+  height    Int
+  weight    Int
+  abilities String?
+  poketypes String?
+}
