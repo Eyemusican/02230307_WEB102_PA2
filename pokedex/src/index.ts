@@ -6,7 +6,7 @@ import { HTTPException } from "hono/http-exception";
 import { decode, sign, verify } from "hono/jwt";
 import { jwt } from "hono/jwt";
 import bcrypt from "bcrypt";
-import { resolve } from "path";
+import axios from "axios";
 
 type Variables = JwtVariables;
 
@@ -25,7 +25,6 @@ function rateLimit(limit: number, interval: number) {
       queue.shift();
     }
 
-    // Check if queue length exceeds limit and if it exits send the status  HTTP 429 Too Many Requests
     if (queue.length > limit) {
       return context.json({ message: "Rate limit exceeded" }, 429);
     }
@@ -45,24 +44,15 @@ app.use(
   })
 );
 
-
-// HOME ROUT
+// HOME ROUTE
 app.get("/", (c) => {
   return c.text("Hello Hono!");
 });
-
-// Apply CORS globally
-app.use("/*", cors());
 
 // Apply rate limiting middleware to specific routes
 const rateLimitMiddleware = rateLimit(10, 1000); // 10 requests per second
 app.use("/users", rateLimitMiddleware);
 app.use("/collection", rateLimitMiddleware);
-
-// HOME ROUTE
-app.get("/", (c) => {
-  return c.text("Hello Hono!");
-});
 
 // CRUD for Users
 
@@ -82,7 +72,6 @@ app.post("/register", async (c) => {
         email: body.email,
         password: bcryptHash,
         phonenumber: body.phonenumber,
-      
       },
     });
 
@@ -157,11 +146,10 @@ app.post("/login", async (c) => {
     const payload = {
       userId: user.id,
       email: user.email,
-      role: "user", // Example role
+      role: "user",
     };
     const secret = process.env.JWT_SECRET || "mySecretKey";
     const token = await sign(payload, secret);
-
 
     return c.json({ message: "Login successful", token });
   } catch (error) {
@@ -170,25 +158,25 @@ app.post("/login", async (c) => {
   }
 });
 
-
-
-
 // CRUD for MyCollection
 
-// Create a new collection entry
+//  collection entry by pokemon name( meaning if I put only pokemon name in body, it will display all the data mentioned below)
 app.post("/collection", async (c) => {
   try {
     const body = await c.req.json();
 
+    const response = await axios.get(`https://pokeapi.co/api/v2/pokemon/${body.pokename.toLowerCase()}`);
+    const pokemon = response.data;
+
     const collection = await prisma.mycollection.create({
       data: {
-        pokeimg: body.pokeimg,
-        pokeid: body.pokeid,
-        pokename: body.pokename,
-        height: body.height,
-        weight: body.weight,
-        abilities: body.abilities,
-        poketypes: body.poketypes,
+        pokeimg: pokemon.sprites.front_default,
+        pokeid: pokemon.id,
+        pokename: pokemon.name,
+        height: pokemon.height,
+        weight: pokemon.weight,
+        abilities: pokemon.abilities.map((ability: any) => ability.ability.name).join(', '),
+        poketypes: pokemon.types.map((type: any) => type.type.name).join(', '),
       },
     });
 
@@ -198,6 +186,32 @@ app.post("/collection", async (c) => {
   }
 });
 
+
+// Create a new collection entry
+app.post("/collection/create", async (c) => {
+  try {
+  const body = await c.req.json();
+  
+  const collection = await prisma.mycollection.create({
+    data: {
+      pokeimg: body.pokeimg,
+      pokeid: body.pokeid,
+      pokename: body.pokename,
+      height: body.height,
+      weight: body.weight,
+      abilities: body.abilities,
+      poketypes: body.poketypes,
+    },
+  });
+  
+  return c.json({ message: `Collection entry created successfully`, collection });
+  } catch (e) {
+  return c.json({ message: "An error occurred while creating the collection entry" }, 500);
+  }
+  });
+
+
+
 // Retrieve all collection entries
 app.get("/collection", async (c) => {
   try {
@@ -205,6 +219,29 @@ app.get("/collection", async (c) => {
     return c.json(collections);
   } catch (e) {
     return c.json({ message: "An error occurred while fetching collection entries" }, 500);
+  }
+});
+
+// Retrieve Pokémon details by name
+app.get("/collection/name/:pokename", async (c) => {
+  try {
+    const pokename = c.req.param("pokename");
+    const response = await axios.get(`https://pokeapi.co/api/v2/pokemon/${pokename.toLowerCase()}`);
+    const pokemon = response.data;
+
+    const collection = {
+      pokeimg: pokemon.sprites.front_default,
+      pokeid: pokemon.id,
+      pokename: pokemon.name,
+      height: pokemon.height,
+      weight: pokemon.weight,
+      abilities: pokemon.abilities.map((ability: any) => ability.ability.name).join(', '),
+      poketypes: pokemon.types.map((type: any) => type.type.name).join(', '),
+    };
+
+    return c.json({ message: `Pokémon details fetched successfully`, collection });
+  } catch (e) {
+    return c.json({ message: "An error occurred while fetching Pokémon details" }, 500);
   }
 });
 
@@ -252,7 +289,7 @@ app.patch("/collection/:id", async (c) => {
 
 // Delete a specific collection entry by ID
 app.delete("/collection/:id", async (c) => {
-  try {
+  try { 
     const id = c.req.param("id");
     await prisma.mycollection.delete({
       where: { id: Number(id) },
